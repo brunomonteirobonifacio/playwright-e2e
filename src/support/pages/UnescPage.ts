@@ -12,10 +12,7 @@ export default class UnescPage extends BasePage {
   }
 
   async openUndergraduateCourses(): Promise<void> {
-    const coursesUrl = new URL(
-      '/portal/graduacao',
-      this.page.url()
-    ).toString();
+    const coursesUrl = new URL('/portal/graduacao', this.page.url()).toString();
     await this.page.goto(coursesUrl, { waitUntil: 'domcontentloaded' });
     await expect(this.unescElements.getCourseSearchField()).toBeVisible();
   }
@@ -25,27 +22,41 @@ export default class UnescPage extends BasePage {
   }
 
   async searchCourse(courseName: string): Promise<void> {
-    await this.unescElements.getCourseSearchField().fill(courseName);
+    // A busca (Shuffle.js) filtra os cursos ao reagir a eventos de teclado,
+    // por isso digitamos caractere a caractere em vez de usar fill().
+    const field = this.unescElements.getCourseSearchField();
+    await field.click();
+    await field.pressSequentially(courseName);
   }
 
   async clearCourseSearch(): Promise<void> {
-    await this.unescElements.getCourseSearchField().clear();
+    // Seleciona e apaga o texto disparando keyup para a busca reagir.
+    const field = this.unescElements.getCourseSearchField();
+    await field.press('Control+A');
+    await field.press('Delete');
   }
 
   async openAllNews(): Promise<void> {
     const link = this.unescElements.getAllNewsLink();
     await expect(link).toBeVisible();
     await link.click();
-    await expect(this.page).not.toHaveURL('https://www.unesc.net/');
+    await expect(this.page).toHaveURL(/\/noticias/);
     await expect(this.unescElements.getPageHeadings().first()).toBeVisible();
   }
 
-  async openAllEvents(): Promise<void> {
+  async openAllEvents(): Promise<Page> {
     const link = this.unescElements.getAllEventsLink();
     await expect(link).toBeVisible();
-    await link.click();
-    await expect(this.page).not.toHaveURL('https://www.unesc.net/');
-    await expect(this.unescElements.getPageHeadings().first()).toBeVisible();
+
+    // O link de eventos possui target="_blank"; capturamos a nova aba.
+    const [eventsPage] = await Promise.all([
+      this.page.context().waitForEvent('page'),
+      link.click()
+    ]);
+    await eventsPage.waitForLoadState('domcontentloaded');
+    await expect(eventsPage).toHaveURL(/central-de-eventos/);
+
+    return eventsPage;
   }
 
   async verifyNewsAreListed(): Promise<void> {
